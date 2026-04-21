@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import select, update, exists
 from sqlalchemy.orm import Session
 
 from app.models.categories import Category as CategoryModel
@@ -26,11 +26,17 @@ async def get_all_products(db: Session = Depends(get_db)):
 async def create_product(product: ProductCreate, db: Session = Depends(get_db)):
     """Создаёт новый товар."""
     # проверка на существование категории
-    stmt_categories = select(CategoryModel).where(
-        CategoryModel.id == product.category_id, CategoryModel.is_active == True
+    # stmt_categories = select(CategoryModel).where(
+    #     CategoryModel.id == product.category_id, CategoryModel.is_active == True
+    # )
+    stmt_categories = select(
+        exists().where(
+            CategoryModel.id == product.category_id,
+            CategoryModel.is_active == True,
+        )
     )
-    category = db.scalars(stmt_categories).first()
-    if category is None:
+    category = db.scalar(stmt_categories)
+    if not category:
         raise HTTPException(status_code=400, detail="Category not found or inactive")
 
     db_product = ProductModel(**product.model_dump())
@@ -53,7 +59,7 @@ async def get_products_by_category(category_id: int, db: Session = Depends(get_d
     category = db.scalars(stmt_category).first()
 
     # проверка существования и активности категории товара
-    if category is None:
+    if not category:
         raise HTTPException(status_code=400, detail="Category not found or inactive")
 
     stmt = select(ProductModel).where(
